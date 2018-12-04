@@ -2,66 +2,108 @@
 setwd("/home/belen/Downloads")
 library(caret)
 library(ROCR)
+library(pROC)
 library(forecast)
+library(ggplot2)
+library(reshape)
+library(ggthemes)
 #Reemplazar con ruta a donde está el archivo csv
-cancer_df<-read.csv("cancer_train.csv")
-cancerData <- preProcess(x = cancer_df, method = c("center", "scale")) 
-cancerData <- predict(cancerData, cancer_df) #stored
+cancerTrain<-read.csv("cancer_train.csv")
+cancerTest = read.csv("cancer_test.csv")
 
-cancerData$tipo2 <- 0
-cancerData$tipo2[cancerData$tipo=="M"]<-1
-cancerData$tipo2[cancerData$tipo=="B"]<-0
-cancerData$tipo<-NULL
-
-set.seed(1) #for reproductibility of results
-trainIndex <- createDataPartition(cancerData$tipo2, 
-                                  times = 1,
-                                  p = .80,
-                                  list = FALSE)
-cancerTrain <- cancerData[trainIndex,]
-cancerTest <- cancerData[-trainIndex,]
+cancerTrain$radio <- scale(cancerTrain$radio)
+cancerTrain$simetria <- scale(cancerTrain$simetria)
+cancerTest$radio <- scale(cancerTest$radio)
+cancerTest$simetria <- scale(cancerTest$simetria)
 
 
-model <- glm(tipo2 ~ radio +simetria, 
-             family = binomial(link = "logit"), 
+cancerTrain$tipo <- sapply(cancerTrain$tipo,switch,"M" = 1, "B" = 0)
+cancerTest$tipo <- sapply(cancerTest$tipo,switch,"M" = 1, "B" = 0)
+
+
+model <- glm(tipo ~ radio +simetria, 
+             family = "binomial", 
              data = cancerTrain)
 summary(model)
 
+cancerTrain$prediction <- predict(model, newdata = cancerTrain, type = "response" )
+cancerTest$prediction  <- predict(model, newdata = cancerTest , type = "response" )
 
-#cutoff vals
-thresholds = c(0.1,0.5,0.9)
-for (threshold in thresholds) {
-  result <- predict(model,newdata=cancerTest,type='response')
-  result <- ifelse(result > threshold,1,0)
-  actual_values<-cancerTest$tipo2
-  conf_matrix<-table(result,actual_values)
-  sensitivity = sensitivity(conf_matrix)
-  specificity = specificity(conf_matrix)
-  accuracy = conf_matrix[1,1]+conf_matrix[2,2]/sum(conf_matrix)
-  print(paste0("Threshold ", threshold))
-  print(paste0("sensitivity: ", sensitivity))
-  print(paste0("specificity: ", specificity))
-  print(paste0("accuracy: ", accuracy))
-}
+cancerTest$cutoff.1 <- ifelse(cancerTest$prediction > 0.1, 1, 0)
+cancerTest$cutoff.5 <- ifelse(cancerTest$prediction > 0.5, 1, 0)
+cancerTest$cutoff.9 <- ifelse(cancerTest$prediction > 0.9, 1, 0)
 
-for(cutoff in 1:99){
-  cu
-}
-#test error
-for(threshold in thresholds){
-  predicted_values<-ifelse(predict(model, newdata = cancerTest,type="response")>threshold,1,0)
-  errors <- accuracy(model$y,cancerTest$tipo2)
-  print(paste0("Threshold ", threshold))
-  print(errors)
-}
+#Confusion matrix
+#caret receives (predicted_results, true_results)
+conf_matrix1 <- confusionMatrix(factor(cancerTest$cutoff.1),factor(cancerTest$tipo))
+conf_matrix5 <- confusionMatrix(factor(cancerTest$cutoff.5),factor(cancerTest$tipo))
+conf_matrix9 <- confusionMatrix(factor(cancerTest$cutoff.9),factor(cancerTest$tipo))
+
+conf_matrix1
+conf_matrix5
+conf_matrix9
+
 
 #train error
-for(threshold in thresholds){
-  predicted_values<-ifelse(predict(model, newdata = cancerTrain,type="response")>threshold,1,0)
-  errors <- accuracy(predicted_values,cancerTrain$tipo2)
-  print(paste0("Threshold ", threshold))
-  print(errors)
-}
+accuracy(cancerTrain$prediction,cancerTrain$tipo)
+#test error
+accuracy(cancerTest$prediction,cancerTest$tipo)
+
+#check error distribution
+m1_t_resid <- cancerTrain$tipo - cancerTrain$prediction
+qqnorm(m1_t_resid)
+qqline(m1_t_resid, lty = 2)
+
+m2_t_resid <- cancerTest$tipo - cancerTest$prediction
+qqnorm(m2_t_resid)
+qqline(m2_t_resid, lty = 2)
 
 #tema2
+
+accuracy.vector <- c()
+sensitivity.vector <- c()
+specificity.vector <- c()
+cutoff.vector <- c()
+
+for (cutoff in 1:99){
+  cutoff <- cutoff/100
+  cutoff.vector <- c( cutoff.vector, cutoff )
+  fitted_vals <- ifelse(cancerTest$prediction > cutoff ,1,0)
+  misClasificError.temp <- mean(fitted_vals!= cancerTest$tipo)
+  accuracy.vector <- c(accuracy.vector, 1 - misClasificError.temp)
+  #u <- union(fitted_vals, cancerTest$tipo)
+  confMatrix.temp <- table(factor(fitted_vals),factor(cancerTest$tipo))
+  specificity.temp <- specificity(confMatrix.temp)
+  sensitivity.temp <- sensitivity(confMatrix.temp)
+  specificity.vector <- c(specificity.vector, specificity.temp)
+  sensitivity.vector <- c(sensitivity.vector, sensitivity.temp)
+}
+
+
+table <- data.frame("Accuracy" =  accuracy.vector, "Sensitivity" = sensitivity.vector , "Specificity"= specificity.vector)
+row.names(table) <- cutoff.vector
+graph <- melt(table, id.vars = 0, variable_name = 'Error_metric')
+graph$cutoff <- as.numeric(as.character(row.names(table)))
+graph$value <- as.numeric(as.character(graph$value))
+
+ggplot(data = graph, aes(x = as.numeric(cutoff), y = as.numeric(value), colour = Error_metric)) +
+  ggtitle("Cutoff vs Error metrics") +
+  geom_line(aes(colour = Error_metric)) +
+  ylab("Error metrics")+xlab("Cutoff") + 
+  theme_economist()
+
+
+
+roc1 <- with(cancerTest,roc(tipo,cutoff.1))
+plot(roc1, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white",legend.title="Cutoff value of ")
+
+roc5 <- with(cancerTest,roc(tipo,cutoff.5))
+plot(roc5, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white")
+
+roc9 <- with(cancerTest,roc(tipo,cutoff.9))
+plot(roc9, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white")
+
+
+
+
 
