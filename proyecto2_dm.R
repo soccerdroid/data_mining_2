@@ -60,7 +60,6 @@ qqnorm(m2_t_resid)
 qqline(m2_t_resid, lty = 2)
 
 #tema2
-
 accuracy.vector <- c()
 sensitivity.vector <- c()
 specificity.vector <- c()
@@ -113,43 +112,50 @@ ggplot(data = cancerTest, aes(x = as.numeric(cancerTest$radio), y = as.numeric(c
   geom_abline(intercept = coef(model)[1]/(-coef(model)[3]),slope=coef(model)[2]/(-coef(model)[3]),color="blue")
   
 #tema 4
+library(dummies)
+library(dplyr)
 #Reemplazar con ruta a donde está el archivo csv
 passengers<-read.csv("passengers_data.csv")
 
 #Panorama del dataset
 str(passengers)
 passengers$Age<-as.numeric(passengers$Age) #change age to numeric
-mean_age<-mean(passengers$Age[!is.na(passengers$Age)]) #get the mean age of not na values
-mean_age
-passengers$Age[is.na(passengers$Age)]<-mean_age #replace na values with mean
+colSums(is.na(passengers))
+hist(passengers$Age, col='darkblue',  border="white", 
+     ylim=c(0,200), main='Distribución de edad',
+     xlab = 'Edad', ylab = 'Frecuencia', xlim=c(0,100))
 
-## Missing values imputation
-passengers$Embarked[passengers$Embarked==""] <- "S"
+# Missing values imputation
 passengers$Age[is.na(passengers$Age)] <- median(passengers$Age,na.rm=T)
+passengers$Embarked[passengers$Embarked==""] <- "S"
 
-
-library(dplyr)
-clean_passengers <- passengers %>% select(-c(Cabin, PassengerId, Ticket, Name))
-#convert to factors
+#remove cabin
+passengers <- passengers %>% select(-c(Cabin, PassengerId, Ticket, Name))
+#Convert "Survived","Pclass","Sex","Embarked" to factors
 for (i in c("Survived","Pclass","Sex","Embarked")){
-  clean_passengers[,i]=as.factor(clean_passengers[,i])
+  passengers[,i]=as.factor(passengers[,i])
 }
+## Create dummy variables for categorical variables
+passengers <- dummy.data.frame(passengers, names=c("Pclass","Sex","Embarked"), sep="_")
 
-set.seed(131313)
 #partition
-inTrain<-sample(1:nrow(clean_passengers),dim(clean_passengers)[1]*0.70)
-train.data <- clean_passengers[inTrain,]
-test.data <- clean_passengers[-inTrain,]
+inTrain<-sample(1:nrow(passengers),dim(passengers)[1]*0.70)
+train.data <- passengers[inTrain,]
+test.data <- passengers[-inTrain,]
 
-write.csv(train.data, file = "passengers_train.csv")
-#model
-passengers_lr <- glm(Survived ~.,family=binomial(link='logit'),data=train.data)
-test.data$prediction <- predict(passengers_lr,newdata=test.data,type='response')
-test.data$cutoff.5 <- ifelse(test.data$prediction > 0.5, 1, 0)
+#create model 
+model <- glm(Survived ~.,family=binomial(link='logit'),data=train.data) 
 
-## Confusion matrix and statistics
-pass_conf_mat = confusionMatrix(factor(result), factor(test.data$Survived))
+# Predicting Test Data
+test.data$prediction <- predict(model,newdata=test.data,type='response')
+test.data$cutoff.7 <- ifelse(test.data$prediction > 0.7,1,0)
+
+# Confusion matrix and statistics
+library(caret)
+pass_conf_mat = confusionMatrix(factor(test.data$cutoff.8), factor(test.data$Survived))
 
 #ROC curves
-roc1 <- with(test.data,roc(Survived,cutoff.5))
+roc1 <- with(test.data,roc(Survived,cutoff.7))
 plot(roc1, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white",legend.title="Cutoff value of ")
+
+
