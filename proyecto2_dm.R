@@ -112,5 +112,43 @@ ggplot(data = cancerTest, aes(x = as.numeric(cancerTest$radio), y = as.numeric(c
   geom_point()+
   geom_abline(intercept = coef(model)[1]/(-coef(model)[3]),slope=coef(model)[2]/(-coef(model)[3]),color="blue")
   
+#tema 4
+#Reemplazar con ruta a donde está el archivo csv
+passengers<-read.csv("passengers_data.csv")
+
+#Panorama del dataset
+str(passengers)
+passengers$Age<-as.numeric(passengers$Age) #change age to numeric
+mean_age<-mean(passengers$Age[!is.na(passengers$Age)]) #get the mean age of not na values
+mean_age
+passengers$Age[is.na(passengers$Age)]<-mean_age #replace na values with mean
+
+## Missing values imputation
+passengers$Embarked[passengers$Embarked==""] <- "S"
+passengers$Age[is.na(passengers$Age)] <- median(passengers$Age,na.rm=T)
 
 
+library(dplyr)
+clean_passengers <- passengers %>% select(-c(Cabin, PassengerId, Ticket, Name))
+#convert to factors
+for (i in c("Survived","Pclass","Sex","Embarked")){
+  clean_passengers[,i]=as.factor(clean_passengers[,i])
+}
+
+set.seed(131313)
+#partition
+inTrain<-sample(1:nrow(clean_passengers),dim(clean_passengers)[1]*0.70)
+train.data <- clean_passengers[inTrain,]
+test.data <- clean_passengers[-inTrain,]
+write.csv(test.data, file = "passengers_test.csv")
+#model
+passengers_lr <- glm(Survived ~.,family=binomial(link='logit'),data=train.data)
+test.data$prediction <- predict(passengers_lr,newdata=test.data,type='response')
+test.data$cutoff.5 <- ifelse(test.data$prediction > 0.5, 1, 0)
+
+## Confusion matrix and statistics
+confusionMatrix(factor(result), factor(test.data$Survived))
+
+#ROC curves
+roc1 <- with(test.data,roc(Survived,cutoff.5))
+plot(roc1, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white",legend.title="Cutoff value of ")
