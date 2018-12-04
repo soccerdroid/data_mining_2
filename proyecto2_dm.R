@@ -140,7 +140,8 @@ set.seed(131313)
 inTrain<-sample(1:nrow(clean_passengers),dim(clean_passengers)[1]*0.70)
 train.data <- clean_passengers[inTrain,]
 test.data <- clean_passengers[-inTrain,]
-write.csv(test.data, file = "passengers_test.csv")
+
+write.csv(train.data, file = "passengers_train.csv")
 #model
 passengers_lr <- glm(Survived ~.,family=binomial(link='logit'),data=train.data)
 test.data$prediction <- predict(passengers_lr,newdata=test.data,type='response')
