@@ -7,6 +7,7 @@ library(forecast)
 library(ggplot2)
 library(reshape)
 library(ggthemes)
+library(ggthemr)
 #Reemplazar con ruta a donde está el archivo csv
 cancerTrain<-read.csv("cancer_train.csv")
 cancerTest = read.csv("cancer_test.csv")
@@ -103,7 +104,13 @@ plot(roc5, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col
 roc9 <- with(cancerTest,roc(tipo,cutoff.9))
 plot(roc9, col="blue", print.auc=TRUE, grid=TRUE, auc.polygon=TRUE, identity.col="gray",auc.polygon.col="white")
 
-
-
+#tema 3
+ggplot(data = cancerTest, aes(x = as.numeric(cancerTest$radio), y = as.numeric(cancerTest$simetria), colour = factor(tipo))) +
+  ggtitle("Simetría vs radio") +
+  ylab("Simetría")+xlab("Radio") + 
+  theme_light()+
+  geom_point()+
+  geom_abline(intercept = coef(model)[1]/(-coef(model)[3]),slope=coef(model)[2]/(-coef(model)[3]),color="blue")
+  
 
 
