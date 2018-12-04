@@ -147,7 +147,7 @@ test.data$prediction <- predict(passengers_lr,newdata=test.data,type='response')
 test.data$cutoff.5 <- ifelse(test.data$prediction > 0.5, 1, 0)
 
 ## Confusion matrix and statistics
-confusionMatrix(factor(result), factor(test.data$Survived))
+pass_conf_mat = confusionMatrix(factor(result), factor(test.data$Survived))
 
 #ROC curves
 roc1 <- with(test.data,roc(Survived,cutoff.5))
